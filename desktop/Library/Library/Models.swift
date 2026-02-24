@@ -34,8 +34,8 @@ struct GenreRequest: Codable {
 struct Book: Identifiable, Codable, Hashable {
     let id: Int
     var title: String
-    var authorId: Int
-    var authorName: String
+    var authorIds: [Int]
+    var authorNames: [String]
     var genreId: Int
     var genreName: String
     var publishYear: Int
@@ -45,7 +45,7 @@ struct Book: Identifiable, Codable, Hashable {
 
 struct BookRequest: Codable {
     var title: String
-    var authorId: Int
+    var authorIds: [Int]
     var genreId: Int
     var publishYear: Int
     var isbn: String

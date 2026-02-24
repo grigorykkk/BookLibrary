@@ -10,7 +10,7 @@ struct BookFormView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var bookTitle: String
-    @State private var selectedAuthorId: Int
+    @State private var selectedAuthorIds: Set<Int>
     @State private var selectedGenreId: Int
     @State private var publishYear: String
     @State private var isbn: String
@@ -31,11 +31,16 @@ struct BookFormView: View {
         self.genres = genres
         self.onSave = onSave
 
-        let defaultAuthorId = book?.authorId ?? authors.first?.id ?? 0
         let defaultGenreId = book?.genreId ?? genres.first?.id ?? 0
+        let defaultAuthorIds: Set<Int> = {
+            if let ids = book?.authorIds, !ids.isEmpty {
+                return Set(ids)
+            }
+            return []
+        }()
 
         _bookTitle = State(initialValue: book?.title ?? "")
-        _selectedAuthorId = State(initialValue: defaultAuthorId)
+        _selectedAuthorIds = State(initialValue: defaultAuthorIds)
         _selectedGenreId = State(initialValue: defaultGenreId)
         _publishYear = State(initialValue: book.map { String($0.publishYear) } ?? "")
         _isbn = State(initialValue: book?.isbn ?? "")
@@ -47,23 +52,40 @@ struct BookFormView: View {
             Form {
                 Section("Основные данные") {
                     TextField("Название", text: $bookTitle)
+
                     TextField("ISBN", text: $isbn)
+                        .onChange(of: isbn) { _, newValue in
+                            let filtered = String(newValue.filter(\.isNumber).prefix(13))
+                            if filtered != newValue {
+                                isbn = filtered
+                            }
+                        }
+
                     TextField("Год публикации", text: $publishYear)
                     TextField("Количество в наличии", text: $quantityInStock)
                 }
 
-                Section("Связи") {
+                Section("Авторы") {
                     if authors.isEmpty {
                         Text("Нет авторов. Сначала добавьте автора.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Автор", selection: $selectedAuthorId) {
-                            ForEach(authors) { author in
-                                Text(author.fullName).tag(author.id)
-                            }
+                        ForEach(authors) { author in
+                            Toggle(author.fullName, isOn: Binding(
+                                get: { selectedAuthorIds.contains(author.id) },
+                                set: { isSelected in
+                                    if isSelected {
+                                        selectedAuthorIds.insert(author.id)
+                                    } else {
+                                        selectedAuthorIds.remove(author.id)
+                                    }
+                                }
+                            ))
                         }
                     }
+                }
 
+                Section("Жанр") {
                     if genres.isEmpty {
                         Text("Нет жанров. Сначала добавьте жанр.")
                             .foregroundStyle(.secondary)
@@ -119,6 +141,11 @@ struct BookFormView: View {
             return
         }
 
+        guard normalizedIsbn.allSatisfy(\.isNumber), (1...13).contains(normalizedIsbn.count) else {
+            localErrorMessage = "ISBN должен содержать только цифры (1–13)."
+            return
+        }
+
         guard let normalizedPublishYear = Int(publishYear), (1...9999).contains(normalizedPublishYear) else {
             localErrorMessage = "Год публикации должен быть числом от 1 до 9999."
             return
@@ -129,8 +156,8 @@ struct BookFormView: View {
             return
         }
 
-        guard selectedAuthorId > 0 else {
-            localErrorMessage = "Выберите автора."
+        guard !selectedAuthorIds.isEmpty else {
+            localErrorMessage = "Выберите хотя бы одного автора."
             return
         }
 
@@ -141,7 +168,7 @@ struct BookFormView: View {
 
         let request = BookRequest(
             title: normalizedTitle,
-            authorId: selectedAuthorId,
+            authorIds: Array(selectedAuthorIds),
             genreId: selectedGenreId,
             publishYear: normalizedPublishYear,
             isbn: normalizedIsbn,

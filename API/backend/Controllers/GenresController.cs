@@ -59,9 +59,23 @@ public sealed class GenresController(LibraryDbContext dbContext) : ControllerBas
             return BadRequest(new ApiErrorResponse(errorMessage));
         }
 
+        var normalizedName = request.Name.Trim();
+
+        var existingGenres = await dbContext.Genres
+            .Select(g => g.Name)
+            .ToListAsync();
+
+        var duplicate = existingGenres.Any(name =>
+            string.Equals(name, normalizedName, StringComparison.OrdinalIgnoreCase));
+
+        if (duplicate)
+        {
+            return Conflict(new ApiErrorResponse($"Genre '{normalizedName}' already exists."));
+        }
+
         var genre = new Genre
         {
-            Name = request.Name.Trim(),
+            Name = normalizedName,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim()
         };
 
@@ -85,7 +99,22 @@ public sealed class GenresController(LibraryDbContext dbContext) : ControllerBas
             return NotFound(new ApiErrorResponse($"Genre with id {id} was not found."));
         }
 
-        genre.Name = request.Name.Trim();
+        var normalizedName = request.Name.Trim();
+
+        var existingGenres = await dbContext.Genres
+            .Where(g => g.Id != id)
+            .Select(g => g.Name)
+            .ToListAsync();
+
+        var duplicate = existingGenres.Any(name =>
+            string.Equals(name, normalizedName, StringComparison.OrdinalIgnoreCase));
+
+        if (duplicate)
+        {
+            return Conflict(new ApiErrorResponse($"Genre '{normalizedName}' already exists."));
+        }
+
+        genre.Name = normalizedName;
         genre.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
 
         await dbContext.SaveChangesAsync();

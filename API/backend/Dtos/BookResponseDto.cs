@@ -6,8 +6,8 @@ public sealed class BookResponseDto
 {
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
-    public int AuthorId { get; set; }
-    public string AuthorName { get; set; } = string.Empty;
+    public List<int> AuthorIds { get; set; } = [];
+    public List<string> AuthorNames { get; set; } = [];
     public int GenreId { get; set; }
     public string GenreName { get; set; } = string.Empty;
     public int PublishYear { get; set; }

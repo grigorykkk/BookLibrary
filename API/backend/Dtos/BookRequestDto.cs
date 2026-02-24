@@ -8,8 +8,9 @@ public sealed class BookRequestDto
     [MaxLength(200)]
     public string Title { get; set; } = string.Empty;
 
-    [Range(1, int.MaxValue)]
-    public int AuthorId { get; set; }
+    [Required]
+    [MinLength(1)]
+    public List<int> AuthorIds { get; set; } = [];
 
     [Range(1, int.MaxValue)]
     public int GenreId { get; set; }
@@ -18,7 +19,8 @@ public sealed class BookRequestDto
     public int PublishYear { get; set; }
 
     [Required]
-    [MaxLength(32)]
+    [MaxLength(13)]
+    [RegularExpression(@"^\d{1,13}$", ErrorMessage = "ISBN must contain only digits (1-13).")]
     public string ISBN { get; set; } = string.Empty;
 
     [Range(0, int.MaxValue)]

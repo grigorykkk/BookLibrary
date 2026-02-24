@@ -30,9 +30,21 @@ struct AuthorFormView: View {
             Form {
                 Section("Данные автора") {
                     TextField("Имя", text: $firstName)
+                        .onChange(of: firstName) { _, newValue in
+                            let filtered = String(newValue.filter { $0.isLetter || $0 == "-" || $0 == " " }.prefix(100))
+                            if filtered != newValue { firstName = filtered }
+                        }
                     TextField("Фамилия", text: $lastName)
+                        .onChange(of: lastName) { _, newValue in
+                            let filtered = String(newValue.filter { $0.isLetter || $0 == "-" || $0 == " " }.prefix(100))
+                            if filtered != newValue { lastName = filtered }
+                        }
                     DatePicker("Дата рождения", selection: $birthDate, displayedComponents: .date)
                     TextField("Страна", text: $country)
+                        .onChange(of: country) { _, newValue in
+                            let filtered = String(newValue.filter { $0.isLetter || $0 == "-" || $0 == " " }.prefix(100))
+                            if filtered != newValue { country = filtered }
+                        }
                 }
 
                 if let localErrorMessage {

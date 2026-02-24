@@ -6,8 +6,6 @@ public sealed class Book
 
     public required string Title { get; set; }
 
-    public int AuthorId { get; set; }
-
     public int GenreId { get; set; }
 
     public int PublishYear { get; set; }
@@ -16,7 +14,7 @@ public sealed class Book
 
     public int QuantityInStock { get; set; }
 
-    public Author? Author { get; set; }
-
     public Genre? Genre { get; set; }
+
+    public ICollection<BookAuthor> BookAuthors { get; set; } = new List<BookAuthor>();
 }

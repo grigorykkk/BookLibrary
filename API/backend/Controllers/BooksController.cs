@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Backend.Common;
 using Backend.Data;
 using Backend.Dtos;
@@ -10,7 +11,7 @@ namespace Backend.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
+public sealed partial class BooksController(LibraryDbContext dbContext) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<BookResponseDto>>> GetAll(
@@ -40,7 +41,7 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
 
         if (authorId.HasValue)
         {
-            query = query.Where(book => book.AuthorId == authorId.Value);
+            query = query.Where(book => book.BookAuthors.Any(ba => ba.AuthorId == authorId.Value));
         }
 
         if (genreId.HasValue)
@@ -54,8 +55,10 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             {
                 Id = book.Id,
                 Title = book.Title,
-                AuthorId = book.AuthorId,
-                AuthorName = $"{book.Author!.FirstName} {book.Author.LastName}".Trim(),
+                AuthorIds = book.BookAuthors.Select(ba => ba.AuthorId).ToList(),
+                AuthorNames = book.BookAuthors
+                    .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
+                    .ToList(),
                 GenreId = book.GenreId,
                 GenreName = book.Genre!.Name,
                 PublishYear = book.PublishYear,
@@ -70,21 +73,9 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<BookResponseDto>> GetById(int id)
     {
-        var book = await dbContext.Books
-            .AsNoTracking()
-            .Where(existingBook => existingBook.Id == id)
-            .Select(existingBook => new BookResponseDto
-            {
-                Id = existingBook.Id,
-                Title = existingBook.Title,
-                AuthorId = existingBook.AuthorId,
-                AuthorName = $"{existingBook.Author!.FirstName} {existingBook.Author.LastName}".Trim(),
-                GenreId = existingBook.GenreId,
-                GenreName = existingBook.Genre!.Name,
-                PublishYear = existingBook.PublishYear,
-                ISBN = existingBook.ISBN,
-                QuantityInStock = existingBook.QuantityInStock
-            })
+        var book = await BuildResponseQueryable()
+            .Where(b => b.Id == id)
+            .Select(b => MapToResponse(b))
             .FirstOrDefaultAsync();
 
         if (book is null)
@@ -103,10 +94,11 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             return BadRequest(new ApiErrorResponse(errorMessage));
         }
 
-        var authorExists = await dbContext.Authors.AnyAsync(author => author.Id == request.AuthorId);
-        if (!authorExists)
+        var trimmedIsbn = request.ISBN.Trim();
+        var isbnDuplicate = await dbContext.Books.AnyAsync(b => b.ISBN == trimmedIsbn);
+        if (isbnDuplicate)
         {
-            return BadRequest(new ApiErrorResponse($"Author with id {request.AuthorId} does not exist."));
+            return Conflict(new ApiErrorResponse($"A book with ISBN '{trimmedIsbn}' already exists."));
         }
 
         var genreExists = await dbContext.Genres.AnyAsync(genre => genre.Id == request.GenreId);
@@ -115,20 +107,33 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             return BadRequest(new ApiErrorResponse($"Genre with id {request.GenreId} does not exist."));
         }
 
+        var distinctAuthorIds = request.AuthorIds.Distinct().ToList();
+        var existingAuthorCount = await dbContext.Authors.CountAsync(a => distinctAuthorIds.Contains(a.Id));
+        if (existingAuthorCount != distinctAuthorIds.Count)
+        {
+            return BadRequest(new ApiErrorResponse("One or more author IDs do not exist."));
+        }
+
         var book = new Book
         {
             Title = request.Title.Trim(),
-            AuthorId = request.AuthorId,
             GenreId = request.GenreId,
             PublishYear = request.PublishYear,
-            ISBN = request.ISBN.Trim(),
+            ISBN = trimmedIsbn,
             QuantityInStock = request.QuantityInStock
         };
 
         dbContext.Books.Add(book);
         await dbContext.SaveChangesAsync();
 
-        var response = await BuildResponseAsync(book.Id);
+        foreach (var authorId in distinctAuthorIds)
+        {
+            dbContext.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = authorId });
+        }
+
+        await dbContext.SaveChangesAsync();
+
+        var response = await BuildSingleResponseAsync(book.Id);
         return CreatedAtAction(nameof(GetById), new { id = book.Id }, response);
     }
 
@@ -140,16 +145,20 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             return BadRequest(new ApiErrorResponse(errorMessage));
         }
 
-        var book = await dbContext.Books.FirstOrDefaultAsync(existingBook => existingBook.Id == id);
+        var book = await dbContext.Books
+            .Include(b => b.BookAuthors)
+            .FirstOrDefaultAsync(b => b.Id == id);
+
         if (book is null)
         {
             return NotFound(new ApiErrorResponse($"Book with id {id} was not found."));
         }
 
-        var authorExists = await dbContext.Authors.AnyAsync(author => author.Id == request.AuthorId);
-        if (!authorExists)
+        var trimmedIsbn = request.ISBN.Trim();
+        var isbnDuplicate = await dbContext.Books.AnyAsync(b => b.ISBN == trimmedIsbn && b.Id != id);
+        if (isbnDuplicate)
         {
-            return BadRequest(new ApiErrorResponse($"Author with id {request.AuthorId} does not exist."));
+            return Conflict(new ApiErrorResponse($"A book with ISBN '{trimmedIsbn}' already exists."));
         }
 
         var genreExists = await dbContext.Genres.AnyAsync(genre => genre.Id == request.GenreId);
@@ -158,16 +167,28 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             return BadRequest(new ApiErrorResponse($"Genre with id {request.GenreId} does not exist."));
         }
 
+        var distinctAuthorIds = request.AuthorIds.Distinct().ToList();
+        var existingAuthorCount = await dbContext.Authors.CountAsync(a => distinctAuthorIds.Contains(a.Id));
+        if (existingAuthorCount != distinctAuthorIds.Count)
+        {
+            return BadRequest(new ApiErrorResponse("One or more author IDs do not exist."));
+        }
+
         book.Title = request.Title.Trim();
-        book.AuthorId = request.AuthorId;
         book.GenreId = request.GenreId;
         book.PublishYear = request.PublishYear;
-        book.ISBN = request.ISBN.Trim();
+        book.ISBN = trimmedIsbn;
         book.QuantityInStock = request.QuantityInStock;
+
+        book.BookAuthors.Clear();
+        foreach (var authorId in distinctAuthorIds)
+        {
+            book.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = authorId });
+        }
 
         await dbContext.SaveChangesAsync();
 
-        var response = await BuildResponseAsync(book.Id);
+        var response = await BuildSingleResponseAsync(book.Id);
         return Ok(response);
     }
 
@@ -185,24 +206,51 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
         return NoContent();
     }
 
-    private async Task<BookResponseDto> BuildResponseAsync(int id)
+    private IQueryable<Book> BuildResponseQueryable()
     {
-        return await dbContext.Books
+        return dbContext.Books
             .AsNoTracking()
-            .Where(book => book.Id == id)
-            .Select(book => new BookResponseDto
+            .Include(b => b.BookAuthors)
+            .ThenInclude(ba => ba.Author);
+    }
+
+    private async Task<BookResponseDto> BuildSingleResponseAsync(int id)
+    {
+        return await BuildResponseQueryable()
+            .Where(b => b.Id == id)
+            .Select(b => new BookResponseDto
             {
-                Id = book.Id,
-                Title = book.Title,
-                AuthorId = book.AuthorId,
-                AuthorName = $"{book.Author!.FirstName} {book.Author.LastName}".Trim(),
-                GenreId = book.GenreId,
-                GenreName = book.Genre!.Name,
-                PublishYear = book.PublishYear,
-                ISBN = book.ISBN,
-                QuantityInStock = book.QuantityInStock
+                Id = b.Id,
+                Title = b.Title,
+                AuthorIds = b.BookAuthors.Select(ba => ba.AuthorId).ToList(),
+                AuthorNames = b.BookAuthors
+                    .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
+                    .ToList(),
+                GenreId = b.GenreId,
+                GenreName = b.Genre!.Name,
+                PublishYear = b.PublishYear,
+                ISBN = b.ISBN,
+                QuantityInStock = b.QuantityInStock
             })
             .SingleAsync();
+    }
+
+    private static BookResponseDto MapToResponse(Book b)
+    {
+        return new BookResponseDto
+        {
+            Id = b.Id,
+            Title = b.Title,
+            AuthorIds = b.BookAuthors.Select(ba => ba.AuthorId).ToList(),
+            AuthorNames = b.BookAuthors
+                .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
+                .ToList(),
+            GenreId = b.GenreId,
+            GenreName = b.Genre!.Name,
+            PublishYear = b.PublishYear,
+            ISBN = b.ISBN,
+            QuantityInStock = b.QuantityInStock
+        };
     }
 
     private static bool TryValidateRequest(BookRequestDto request, out string errorMessage)
@@ -219,6 +267,24 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
             return false;
         }
 
+        if (!IsbnRegex().IsMatch(request.ISBN.Trim()))
+        {
+            errorMessage = "ISBN must contain only digits (1-13).";
+            return false;
+        }
+
+        if (request.AuthorIds is null || request.AuthorIds.Count == 0)
+        {
+            errorMessage = "At least one author is required.";
+            return false;
+        }
+
+        if (request.AuthorIds.Any(id => id <= 0))
+        {
+            errorMessage = "All author IDs must be greater than zero.";
+            return false;
+        }
+
         if (request.QuantityInStock < 0)
         {
             errorMessage = "QuantityInStock cannot be negative.";
@@ -228,4 +294,7 @@ public sealed class BooksController(LibraryDbContext dbContext) : ControllerBase
         errorMessage = string.Empty;
         return true;
     }
+
+    [GeneratedRegex(@"^\d{1,13}$")]
+    private static partial Regex IsbnRegex();
 }

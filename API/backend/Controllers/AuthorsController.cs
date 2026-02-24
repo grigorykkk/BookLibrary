@@ -64,10 +64,27 @@ public sealed class AuthorsController(LibraryDbContext dbContext) : ControllerBa
             return BadRequest(new ApiErrorResponse(errorMessage));
         }
 
+        var normalizedFirst = request.FirstName.Trim();
+        var normalizedLast = request.LastName.Trim();
+
+        var existingAuthors = await dbContext.Authors
+            .Select(a => new { a.FirstName, a.LastName })
+            .ToListAsync();
+
+        var duplicate = existingAuthors.Any(a =>
+            string.Equals(a.FirstName, normalizedFirst, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(a.LastName, normalizedLast, StringComparison.OrdinalIgnoreCase));
+
+        if (duplicate)
+        {
+            return Conflict(new ApiErrorResponse(
+                $"Author '{normalizedFirst} {normalizedLast}' already exists."));
+        }
+
         var author = new Author
         {
-            FirstName = request.FirstName.Trim(),
-            LastName = request.LastName.Trim(),
+            FirstName = normalizedFirst,
+            LastName = normalizedLast,
             BirthDate = request.BirthDate,
             Country = string.IsNullOrWhiteSpace(request.Country) ? null : request.Country.Trim()
         };
@@ -95,8 +112,26 @@ public sealed class AuthorsController(LibraryDbContext dbContext) : ControllerBa
             return NotFound(new ApiErrorResponse($"Author with id {id} was not found."));
         }
 
-        author.FirstName = request.FirstName.Trim();
-        author.LastName = request.LastName.Trim();
+        var normalizedFirst = request.FirstName.Trim();
+        var normalizedLast = request.LastName.Trim();
+
+        var existingAuthors = await dbContext.Authors
+            .Where(a => a.Id != id)
+            .Select(a => new { a.FirstName, a.LastName })
+            .ToListAsync();
+
+        var duplicate = existingAuthors.Any(a =>
+            string.Equals(a.FirstName, normalizedFirst, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(a.LastName, normalizedLast, StringComparison.OrdinalIgnoreCase));
+
+        if (duplicate)
+        {
+            return Conflict(new ApiErrorResponse(
+                $"Author '{normalizedFirst} {normalizedLast}' already exists."));
+        }
+
+        author.FirstName = normalizedFirst;
+        author.LastName = normalizedLast;
         author.BirthDate = request.BirthDate;
         author.Country = string.IsNullOrWhiteSpace(request.Country) ? null : request.Country.Trim();
 

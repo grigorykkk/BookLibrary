@@ -205,3 +205,4 @@
 /Users/sskaaat/DevProjects/BookLibrary/API/backend/obj/Debug/net10.0/backend.pdb
 /Users/sskaaat/DevProjects/BookLibrary/API/backend/obj/Debug/net10.0/backend.genruntimeconfig.cache
 /Users/sskaaat/DevProjects/BookLibrary/API/backend/obj/Debug/net10.0/ref/backend.dll
+/Users/sskaaat/DevProjects/BookLibrary/API/backend/obj/Debug/net10.0/backend.sourcelink.json

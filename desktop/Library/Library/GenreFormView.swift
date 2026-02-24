@@ -26,6 +26,10 @@ struct GenreFormView: View {
             Form {
                 Section("Данные жанра") {
                     TextField("Название", text: $name)
+                        .onChange(of: name) { _, newValue in
+                            let filtered = String(newValue.filter { $0.isLetter || $0 == "-" || $0 == " " }.prefix(100))
+                            if filtered != newValue { name = filtered }
+                        }
                     TextField("Описание", text: $description, axis: .vertical)
                         .lineLimit(3...6)
                 }

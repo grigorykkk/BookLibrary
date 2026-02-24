@@ -12,5 +12,5 @@ public sealed class Author
 
     public string? Country { get; set; }
 
-    public ICollection<Book> Books { get; set; } = new List<Book>();
+    public ICollection<BookAuthor> BookAuthors { get; set; } = new List<BookAuthor>();
 }
