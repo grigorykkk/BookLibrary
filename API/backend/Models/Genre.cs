@@ -8,5 +8,5 @@ public sealed class Genre
 
     public string? Description { get; set; }
 
-    public ICollection<Book> Books { get; set; } = new List<Book>();
+    public ICollection<BookGenre> BookGenres { get; set; } = new List<BookGenre>();
 }

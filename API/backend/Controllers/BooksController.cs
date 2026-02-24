@@ -46,7 +46,7 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
 
         if (genreId.HasValue)
         {
-            query = query.Where(book => book.GenreId == genreId.Value);
+            query = query.Where(book => book.BookGenres.Any(bg => bg.GenreId == genreId.Value));
         }
 
         var books = await query
@@ -59,8 +59,8 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
                 AuthorNames = book.BookAuthors
                     .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
                     .ToList(),
-                GenreId = book.GenreId,
-                GenreName = book.Genre!.Name,
+                GenreIds = book.BookGenres.Select(bg => bg.GenreId).ToList(),
+                GenreNames = book.BookGenres.Select(bg => bg.Genre!.Name).ToList(),
                 PublishYear = book.PublishYear,
                 ISBN = book.ISBN,
                 QuantityInStock = book.QuantityInStock
@@ -101,12 +101,6 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
             return Conflict(new ApiErrorResponse($"A book with ISBN '{trimmedIsbn}' already exists."));
         }
 
-        var genreExists = await dbContext.Genres.AnyAsync(genre => genre.Id == request.GenreId);
-        if (!genreExists)
-        {
-            return BadRequest(new ApiErrorResponse($"Genre with id {request.GenreId} does not exist."));
-        }
-
         var distinctAuthorIds = request.AuthorIds.Distinct().ToList();
         var existingAuthorCount = await dbContext.Authors.CountAsync(a => distinctAuthorIds.Contains(a.Id));
         if (existingAuthorCount != distinctAuthorIds.Count)
@@ -114,10 +108,16 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
             return BadRequest(new ApiErrorResponse("One or more author IDs do not exist."));
         }
 
+        var distinctGenreIds = request.GenreIds.Distinct().ToList();
+        var existingGenreCount = await dbContext.Genres.CountAsync(g => distinctGenreIds.Contains(g.Id));
+        if (existingGenreCount != distinctGenreIds.Count)
+        {
+            return BadRequest(new ApiErrorResponse("One or more genre IDs do not exist."));
+        }
+
         var book = new Book
         {
             Title = request.Title.Trim(),
-            GenreId = request.GenreId,
             PublishYear = request.PublishYear,
             ISBN = trimmedIsbn,
             QuantityInStock = request.QuantityInStock
@@ -126,9 +126,14 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
         dbContext.Books.Add(book);
         await dbContext.SaveChangesAsync();
 
-        foreach (var authorId in distinctAuthorIds)
+        foreach (var aid in distinctAuthorIds)
         {
-            dbContext.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = authorId });
+            dbContext.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = aid });
+        }
+
+        foreach (var gid in distinctGenreIds)
+        {
+            dbContext.BookGenres.Add(new BookGenre { BookId = book.Id, GenreId = gid });
         }
 
         await dbContext.SaveChangesAsync();
@@ -147,6 +152,7 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
 
         var book = await dbContext.Books
             .Include(b => b.BookAuthors)
+            .Include(b => b.BookGenres)
             .FirstOrDefaultAsync(b => b.Id == id);
 
         if (book is null)
@@ -161,12 +167,6 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
             return Conflict(new ApiErrorResponse($"A book with ISBN '{trimmedIsbn}' already exists."));
         }
 
-        var genreExists = await dbContext.Genres.AnyAsync(genre => genre.Id == request.GenreId);
-        if (!genreExists)
-        {
-            return BadRequest(new ApiErrorResponse($"Genre with id {request.GenreId} does not exist."));
-        }
-
         var distinctAuthorIds = request.AuthorIds.Distinct().ToList();
         var existingAuthorCount = await dbContext.Authors.CountAsync(a => distinctAuthorIds.Contains(a.Id));
         if (existingAuthorCount != distinctAuthorIds.Count)
@@ -174,16 +174,28 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
             return BadRequest(new ApiErrorResponse("One or more author IDs do not exist."));
         }
 
+        var distinctGenreIds = request.GenreIds.Distinct().ToList();
+        var existingGenreCount = await dbContext.Genres.CountAsync(g => distinctGenreIds.Contains(g.Id));
+        if (existingGenreCount != distinctGenreIds.Count)
+        {
+            return BadRequest(new ApiErrorResponse("One or more genre IDs do not exist."));
+        }
+
         book.Title = request.Title.Trim();
-        book.GenreId = request.GenreId;
         book.PublishYear = request.PublishYear;
         book.ISBN = trimmedIsbn;
         book.QuantityInStock = request.QuantityInStock;
 
         book.BookAuthors.Clear();
-        foreach (var authorId in distinctAuthorIds)
+        foreach (var aid in distinctAuthorIds)
         {
-            book.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = authorId });
+            book.BookAuthors.Add(new BookAuthor { BookId = book.Id, AuthorId = aid });
+        }
+
+        book.BookGenres.Clear();
+        foreach (var gid in distinctGenreIds)
+        {
+            book.BookGenres.Add(new BookGenre { BookId = book.Id, GenreId = gid });
         }
 
         await dbContext.SaveChangesAsync();
@@ -211,7 +223,9 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
         return dbContext.Books
             .AsNoTracking()
             .Include(b => b.BookAuthors)
-            .ThenInclude(ba => ba.Author);
+            .ThenInclude(ba => ba.Author)
+            .Include(b => b.BookGenres)
+            .ThenInclude(bg => bg.Genre);
     }
 
     private async Task<BookResponseDto> BuildSingleResponseAsync(int id)
@@ -226,8 +240,8 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
                 AuthorNames = b.BookAuthors
                     .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
                     .ToList(),
-                GenreId = b.GenreId,
-                GenreName = b.Genre!.Name,
+                GenreIds = b.BookGenres.Select(bg => bg.GenreId).ToList(),
+                GenreNames = b.BookGenres.Select(bg => bg.Genre!.Name).ToList(),
                 PublishYear = b.PublishYear,
                 ISBN = b.ISBN,
                 QuantityInStock = b.QuantityInStock
@@ -245,8 +259,8 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
             AuthorNames = b.BookAuthors
                 .Select(ba => (ba.Author!.FirstName + " " + ba.Author.LastName).Trim())
                 .ToList(),
-            GenreId = b.GenreId,
-            GenreName = b.Genre!.Name,
+            GenreIds = b.BookGenres.Select(bg => bg.GenreId).ToList(),
+            GenreNames = b.BookGenres.Select(bg => bg.Genre!.Name).ToList(),
             PublishYear = b.PublishYear,
             ISBN = b.ISBN,
             QuantityInStock = b.QuantityInStock
@@ -282,6 +296,18 @@ public sealed partial class BooksController(LibraryDbContext dbContext) : Contro
         if (request.AuthorIds.Any(id => id <= 0))
         {
             errorMessage = "All author IDs must be greater than zero.";
+            return false;
+        }
+
+        if (request.GenreIds is null || request.GenreIds.Count == 0)
+        {
+            errorMessage = "At least one genre is required.";
+            return false;
+        }
+
+        if (request.GenreIds.Any(id => id <= 0))
+        {
+            errorMessage = "All genre IDs must be greater than zero.";
             return false;
         }
 

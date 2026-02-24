@@ -8,8 +8,8 @@ public sealed class BookResponseDto
     public string Title { get; set; } = string.Empty;
     public List<int> AuthorIds { get; set; } = [];
     public List<string> AuthorNames { get; set; } = [];
-    public int GenreId { get; set; }
-    public string GenreName { get; set; } = string.Empty;
+    public List<int> GenreIds { get; set; } = [];
+    public List<string> GenreNames { get; set; } = [];
     public int PublishYear { get; set; }
     [JsonPropertyName("isbn")]
     public string ISBN { get; set; } = string.Empty;

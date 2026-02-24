@@ -21,7 +21,7 @@ struct BooksView: View {
                             Text(book.title)
                                 .font(.headline)
 
-                            Text("Автор: \(book.authorNames.joined(separator: ", ")) • Жанр: \(book.genreName)")
+                            Text("Автор: \(book.authorNames.joined(separator: ", ")) • Жанр: \(book.genreNames.joined(separator: ", "))")
                                 .foregroundStyle(.secondary)
 
                             Text("Год: \(book.publishYear) • ISBN: \(book.isbn) • В наличии: \(book.quantityInStock)")

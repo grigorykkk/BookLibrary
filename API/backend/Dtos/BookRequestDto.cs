@@ -12,8 +12,9 @@ public sealed class BookRequestDto
     [MinLength(1)]
     public List<int> AuthorIds { get; set; } = [];
 
-    [Range(1, int.MaxValue)]
-    public int GenreId { get; set; }
+    [Required]
+    [MinLength(1)]
+    public List<int> GenreIds { get; set; } = [];
 
     [Range(1, 9999)]
     public int PublishYear { get; set; }

@@ -11,7 +11,7 @@ struct BookFormView: View {
 
     @State private var bookTitle: String
     @State private var selectedAuthorIds: Set<Int>
-    @State private var selectedGenreId: Int
+    @State private var selectedGenreIds: Set<Int>
     @State private var publishYear: String
     @State private var isbn: String
     @State private var quantityInStock: String
@@ -31,9 +31,14 @@ struct BookFormView: View {
         self.genres = genres
         self.onSave = onSave
 
-        let defaultGenreId = book?.genreId ?? genres.first?.id ?? 0
         let defaultAuthorIds: Set<Int> = {
             if let ids = book?.authorIds, !ids.isEmpty {
+                return Set(ids)
+            }
+            return []
+        }()
+        let defaultGenreIds: Set<Int> = {
+            if let ids = book?.genreIds, !ids.isEmpty {
                 return Set(ids)
             }
             return []
@@ -41,7 +46,7 @@ struct BookFormView: View {
 
         _bookTitle = State(initialValue: book?.title ?? "")
         _selectedAuthorIds = State(initialValue: defaultAuthorIds)
-        _selectedGenreId = State(initialValue: defaultGenreId)
+        _selectedGenreIds = State(initialValue: defaultGenreIds)
         _publishYear = State(initialValue: book.map { String($0.publishYear) } ?? "")
         _isbn = State(initialValue: book?.isbn ?? "")
         _quantityInStock = State(initialValue: book.map { String($0.quantityInStock) } ?? "0")
@@ -85,15 +90,22 @@ struct BookFormView: View {
                     }
                 }
 
-                Section("Жанр") {
+                Section("Жанры") {
                     if genres.isEmpty {
                         Text("Нет жанров. Сначала добавьте жанр.")
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Жанр", selection: $selectedGenreId) {
-                            ForEach(genres) { genre in
-                                Text(genre.name).tag(genre.id)
-                            }
+                        ForEach(genres) { genre in
+                            Toggle(genre.name, isOn: Binding(
+                                get: { selectedGenreIds.contains(genre.id) },
+                                set: { isSelected in
+                                    if isSelected {
+                                        selectedGenreIds.insert(genre.id)
+                                    } else {
+                                        selectedGenreIds.remove(genre.id)
+                                    }
+                                }
+                            ))
                         }
                     }
                 }
@@ -161,15 +173,15 @@ struct BookFormView: View {
             return
         }
 
-        guard selectedGenreId > 0 else {
-            localErrorMessage = "Выберите жанр."
+        guard !selectedGenreIds.isEmpty else {
+            localErrorMessage = "Выберите хотя бы один жанр."
             return
         }
 
         let request = BookRequest(
             title: normalizedTitle,
             authorIds: Array(selectedAuthorIds),
-            genreId: selectedGenreId,
+            genreIds: Array(selectedGenreIds),
             publishYear: normalizedPublishYear,
             isbn: normalizedIsbn,
             quantityInStock: normalizedQuantityInStock)

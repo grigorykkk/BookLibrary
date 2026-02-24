@@ -36,8 +36,8 @@ struct Book: Identifiable, Codable, Hashable {
     var title: String
     var authorIds: [Int]
     var authorNames: [String]
-    var genreId: Int
-    var genreName: String
+    var genreIds: [Int]
+    var genreNames: [String]
     var publishYear: Int
     var isbn: String
     var quantityInStock: Int
@@ -46,7 +46,7 @@ struct Book: Identifiable, Codable, Hashable {
 struct BookRequest: Codable {
     var title: String
     var authorIds: [Int]
-    var genreId: Int
+    var genreIds: [Int]
     var publishYear: Int
     var isbn: String
     var quantityInStock: Int

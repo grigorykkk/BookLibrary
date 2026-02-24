@@ -9,6 +9,7 @@ public sealed class LibraryDbContext(DbContextOptions<LibraryDbContext> options)
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<Book> Books => Set<Book>();
     public DbSet<BookAuthor> BookAuthors => Set<BookAuthor>();
+    public DbSet<BookGenre> BookGenres => Set<BookGenre>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,11 +49,6 @@ public sealed class LibraryDbContext(DbContextOptions<LibraryDbContext> options)
 
             entity.Property(book => book.QuantityInStock)
                 .HasDefaultValue(0);
-
-            entity.HasOne(book => book.Genre)
-                .WithMany(genre => genre.Books)
-                .HasForeignKey(book => book.GenreId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<BookAuthor>(entity =>
@@ -67,6 +63,21 @@ public sealed class LibraryDbContext(DbContextOptions<LibraryDbContext> options)
             entity.HasOne(bookAuthor => bookAuthor.Author)
                 .WithMany(author => author.BookAuthors)
                 .HasForeignKey(bookAuthor => bookAuthor.AuthorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookGenre>(entity =>
+        {
+            entity.HasKey(bookGenre => new { bookGenre.BookId, bookGenre.GenreId });
+
+            entity.HasOne(bookGenre => bookGenre.Book)
+                .WithMany(book => book.BookGenres)
+                .HasForeignKey(bookGenre => bookGenre.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(bookGenre => bookGenre.Genre)
+                .WithMany(genre => genre.BookGenres)
+                .HasForeignKey(bookGenre => bookGenre.GenreId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
